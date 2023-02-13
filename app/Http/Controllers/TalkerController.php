@@ -4,12 +4,12 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
+use utils\JsonFileManager;
 
 
 class TalkerController extends Controller
 {
     private $path = 'database/talkers.json';
-
 
     private function readJsonFile()
     {
@@ -17,94 +17,14 @@ class TalkerController extends Controller
         return json_decode($jsonString, true);
     }
 
-    private function getTokenFromJsonFile()
+    private function verifyToken($requestToken)
     {
-        $talkers = $this->readJsonFile();
-        return $talkers[0];
-    }
-
-    private function verifyToken($requesToken)
-    {
-        $token = $this->getTokenFromJsonFile();
-        if (!$requesToken)
-            return ["message" => "Token não encontrado!"];
-        if ($token !== $requesToken)
-            return ["message" => "Token inválido!"];
+        $data = $this->readJsonFile();
+        if (!$requestToken)
+            return response()->json(["message" => "Token não encontrado!"], 401);
+        if ($data["token"] !== $requestToken)
+            return response()->json(["message" => "Token inválido!"], 401);
         return false;
-    }
-
-    private function verifyName($name)
-    {
-        if (!$name)
-            return ["message" => "O campo name é obrigatório!"];
-        if (strlen($name) < 3)
-            return ["message" => "O name deve ter pelo menos 3 caracteres"];
-        return false;
-    }
-
-    private function verifyAge($age)
-    {
-        if (!$age)
-            return ["message" => "O campo age é obrigatório!"];
-        if ($age < 18)
-            return ["message" => "A pessoa palestrante deve ser maior de idade"];
-        return false;
-    }
-
-    private function verifyTalk($talk)
-    {
-        if (!$talk)
-            return ["message" => "O campo talk é obrigatório!"];
-        if (!array_key_exists("rate", $talk))
-            return ["message" => "O campo rate é obrigatório!"];
-        if (!array_key_exists("watchedAt", $talk))
-            return ["message" => "O campo watchedAt é obrigatório!"];
-        return false;
-    }
-
-    private function verifyTalkRate($rate)
-    {
-        if ($rate < 1 || $rate > 5)
-            return ["message" => "O campo rate deve ser um número de 1 à 5"];
-        return false;
-    }
-
-    private function verifyTalkWatchedAt($date)
-    {
-        $regex = "/^([0-2][0-9]|(3)[0-1])(\/)(((0)[0-9])|((1)[0-2]))(\/)\d{4}$/";
-        $isValidDate = preg_match($regex, $date);
-
-        if (!$isValidDate)
-            return ["message" => "O campo watchedAt deve ter o formato dd/mm/aaaa"];
-
-        return false;
-    }
-
-    private function verifyFields($authorization, $name, $age, $talk)
-    {
-        $isNotValidToken = $this->verifyToken($authorization);
-        if ($isNotValidToken)
-            return response()->json($isNotValidToken, 401);
-
-        $isNotValidName = $this->verifyName($name);
-        if ($isNotValidName)
-            return response()->json($isNotValidName, 400);
-
-        $isNotValidAge = $this->verifyAge($age);
-        if ($isNotValidAge)
-            return response()->json($isNotValidAge, 400);
-
-        $isNotValidTalk = $this->verifyTalk($talk);
-        if ($isNotValidTalk)
-            return response()->json($isNotValidTalk, 400);
-
-        $isNotValidTalkRate = $this->verifyTalkRate($talk['rate']);
-        if ($isNotValidTalkRate)
-            return response()->json($isNotValidTalkRate, 400);
-
-        $isNotValidTalkWatch = $this->verifyTalkWatchedAt($talk['watchedAt']);
-        if ($isNotValidTalkWatch)
-            return response()->json($isNotValidTalkWatch, 400);
     }
 
     public function getAllTalkers()
@@ -131,47 +51,35 @@ class TalkerController extends Controller
         ], 404);
     }
 
-    public function createTalker(Request $request)
+    public function createTalker(Request $request, JsonFileManager $dataManager)
     {
         $authorization = $request->header('Authorization');
-        $name = $request->name;
-        $age = $request->age;
-        $talk = $request->talk;
+        $isNotAuthorized = $this->verifyToken($authorization);
 
-        $isNotValidRequest = $this->verifyFields($authorization, $name, $age, $talk);
+        if ($isNotAuthorized)
+            return $isNotAuthorized;
 
-        if ($isNotValidRequest) {
-            return $isNotValidRequest;
-        }
-
-        $talkers = $this->readJsonFile();
-        array_push($talkers, [
-            "id" => count($talkers) === 1 ? 1 : $talkers[count($talkers) - 1]["id"] + 1,
-            "name" => $name,
-            "age" => $age,
-            "talk" => $talk,
+        $data = $this->readJsonFile();
+        array_push($data["talkers"], [
+            "id" => count($data["talkers"]) === 0 ? 1 : $data["talkers"][count($data["talkers"]) - 1]["id"] + 1,
+            ...$request->all()
         ]);
 
-        file_put_contents(base_path($this->path), json_encode($talkers));
+        file_put_contents(base_path($this->path), json_encode($data));
 
         return response()->json([
             "message" => "Palestrante criado com sucesso!",
-            "talker" => $talkers[count($talkers) - 1]
+            "talker" => $data["talkers"][count($data["talkers"]) - 1],
         ]);
     }
 
     public function updateTalker(Request $request, $id)
     {
         $authorization = $request->header('Authorization');
-        $name = $request->name;
-        $age = $request->age;
-        $talk = $request->talk;
+        $isNotAuthorized = $this->verifyToken($authorization);
 
-        $isNotValidRequest = $this->verifyFields($authorization, $name, $age, $talk);
-
-        if ($isNotValidRequest) {
-            return $isNotValidRequest;
-        }
+        if ($isNotAuthorized)
+            return $isNotAuthorized;
 
         $talkers = $this->readJsonFile();
 
@@ -179,9 +87,9 @@ class TalkerController extends Controller
         for ($i = 1; $i < count($talkers); $i += 1) {
             global $talkerFoundedIndex;
             if ($talkers[$i]["id"] === intval($id)) {
-                $talkers[$i]["name"] = $name;
-                $talkers[$i]["age"] = $age;
-                $talkers[$i]["talk"] = $talk;
+                $talkers[$i]["name"] = $request->name;
+                $talkers[$i]["age"] = $request->age;
+                $talkers[$i]["talk"] = $request->talk;
 
                 $talkerFoundedIndex = $i;
             }
@@ -202,11 +110,11 @@ class TalkerController extends Controller
 
     public function deleteTalker(Request $request, $id)
     {
-        $authorization = $request->header('authorization');
+        $authorization = $request->header('Authorization');
+        $isNotAuthorized = $this->verifyToken($authorization);
 
-        $isNotValidToken = $this->verifyToken($authorization);
-        if ($isNotValidToken)
-            return response()->json($isNotValidToken, 401);
+        if ($isNotAuthorized)
+            return $isNotAuthorized;
 
         $talkers = $this->readJsonFile();
         $filteredTalkers = [];
@@ -228,11 +136,11 @@ class TalkerController extends Controller
     public function searchTalker(Request $request)
     {
         $searchTerm = $request->query('q');
-        $authorization = $request->header('authorization');
+        $authorization = $request->header('Authorization');
 
-        $isNotValidToken = $this->verifyToken($authorization);
-        if ($isNotValidToken)
-            return response()->json($isNotValidToken, 401);
+        $isNotAuthorized = $this->verifyToken($authorization);
+        if ($isNotAuthorized)
+            return $isNotAuthorized;
 
         $talkers = $this->readJsonFile();
 
