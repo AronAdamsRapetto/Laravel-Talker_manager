@@ -74,7 +74,7 @@ class TalkerController extends Controller
             return $isNotAuthorized;
 
 
-        $talkerFoundedIndex = 0;
+        $talkerFoundedIndex = -1;
         for ($i = 0; $i < count($data["talkers"]); $i += 1) {
             global $talkerFoundedIndex;
             if ($data["talkers"][$i]["id"] === intval($id)) {
@@ -86,7 +86,7 @@ class TalkerController extends Controller
             }
         }
 
-        if (!$talkerFoundedIndex)
+        if ($talkerFoundedIndex === -1)
             return response()->json([
                 "message" => "Talker not found!",
             ], 404);
@@ -108,10 +108,9 @@ class TalkerController extends Controller
         if ($isNotAuthorized)
             return $isNotAuthorized;
 
-        $filteredTalkers = [];
         for ($i = 0; $i < count($data["talkers"]); $i += 1) {
             if ($data["talkers"][$i]['id'] !== intval($id)) {
-                array_push($filteredTalkers, $data["talkers"][$i]);
+                array_splice($data["talkers"], $i, 1);
             }
         }
 
