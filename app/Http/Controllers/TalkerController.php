@@ -11,37 +11,26 @@ class TalkerController extends Controller
 {
     private $path = 'database/talkers.json';
 
-    private function readJsonFile()
+    private function verifyToken($storedToken, $requestToken)
     {
-        $jsonString = file_get_contents(base_path($this->path));
-        return json_decode($jsonString, true);
-    }
-
-    private function verifyToken($requestToken)
-    {
-        $data = $this->readJsonFile();
         if (!$requestToken)
             return response()->json(["message" => "Token não encontrado!"], 401);
-        if ($data["token"] !== $requestToken)
+        if ($storedToken !== $requestToken)
             return response()->json(["message" => "Token inválido!"], 401);
         return false;
     }
 
-    public function getAllTalkers()
+    public function getAllTalkers(JsonFileManager $dataManager)
     {
-        $talkers = $this->readJsonFile();
-        if (is_string($talkers[0]))
-            array_shift($talkers);
-        return response()->json($talkers, 200);
+        $data = $dataManager->readJsonFile($this->path);
+        return response()->json($data["talkers"], 200);
     }
 
-    public function getTalker($id)
+    public function getTalker(JsonFileManager $dataManager, $id)
     {
-        $talkers = $this->readJsonFile();
+        $data = $dataManager->readJsonFile($this->path);
 
-        foreach ($talkers as $talker) {
-            if (is_string($talker))
-                continue;
+        foreach ($data["talkers"] as $talker) {
             if ($talker['id'] === intval($id))
                 return response()->json($talker, 200);
         }
@@ -53,19 +42,21 @@ class TalkerController extends Controller
 
     public function createTalker(Request $request, JsonFileManager $dataManager)
     {
+        $data = $dataManager->readJsonFile($this->path);
         $authorization = $request->header('Authorization');
-        $isNotAuthorized = $this->verifyToken($authorization);
+        $isNotAuthorized = $this->verifyToken($data["token"], $authorization);
 
         if ($isNotAuthorized)
             return $isNotAuthorized;
 
-        $data = $this->readJsonFile();
         array_push($data["talkers"], [
-            "id" => count($data["talkers"]) === 0 ? 1 : $data["talkers"][count($data["talkers"]) - 1]["id"] + 1,
+            "id" => count($data["talkers"]) === 0
+            ? 1
+            : $data["talkers"][count($data["talkers"]) - 1]["id"] + 1,
             ...$request->all()
         ]);
 
-        file_put_contents(base_path($this->path), json_encode($data));
+        $dataManager->saveJsonFile($this->path, $data);
 
         return response()->json([
             "message" => "Palestrante criado com sucesso!",
@@ -73,80 +64,73 @@ class TalkerController extends Controller
         ]);
     }
 
-    public function updateTalker(Request $request, $id)
+    public function updateTalker(Request $request, JsonFileManager $dataManager, $id)
     {
+        $data = $dataManager->readJsonFile($this->path);
         $authorization = $request->header('Authorization');
-        $isNotAuthorized = $this->verifyToken($authorization);
+        $isNotAuthorized = $this->verifyToken($data["token"], $authorization);
 
         if ($isNotAuthorized)
             return $isNotAuthorized;
 
-        $talkers = $this->readJsonFile();
 
         $talkerFoundedIndex = 0;
-        for ($i = 1; $i < count($talkers); $i += 1) {
+        for ($i = 0; $i < count($data["talkers"]); $i += 1) {
             global $talkerFoundedIndex;
-            if ($talkers[$i]["id"] === intval($id)) {
-                $talkers[$i]["name"] = $request->name;
-                $talkers[$i]["age"] = $request->age;
-                $talkers[$i]["talk"] = $request->talk;
+            if ($data["talkers"][$i]["id"] === intval($id)) {
+                $data["talkers"][$i]["name"] = $request->name;
+                $data["talkers"][$i]["age"] = $request->age;
+                $data["talkers"][$i]["talk"] = $request->talk;
 
                 $talkerFoundedIndex = $i;
             }
         }
-
-        file_put_contents(base_path($this->path), json_encode($talkers));
 
         if (!$talkerFoundedIndex)
             return response()->json([
                 "message" => "Talker not found!",
             ], 404);
 
+        $dataManager->saveJsonFile($this->path, $data);
+
         return response()->json([
-            "message" => "Palestrante criado com sucesso!",
-            "talker" => $talkers[$talkerFoundedIndex]
+            "message" => "Palestrante atualizado com sucesso!",
+            "talker" => $data["talkers"][$talkerFoundedIndex]
         ]);
     }
 
-    public function deleteTalker(Request $request, $id)
+    public function deleteTalker(Request $request, JsonFileManager $dataManager, $id)
     {
+        $data = $dataManager->readJsonFile($this->path);
         $authorization = $request->header('Authorization');
-        $isNotAuthorized = $this->verifyToken($authorization);
+        $isNotAuthorized = $this->verifyToken($data["token"], $authorization);
 
         if ($isNotAuthorized)
             return $isNotAuthorized;
 
-        $talkers = $this->readJsonFile();
         $filteredTalkers = [];
-        for ($i = 0; $i < count($talkers); $i += 1) {
-            if (is_string($talkers[$i])) {
-                array_unshift($filteredTalkers, $talkers[$i]);
-                continue;
-            }
-            if ($talkers[$i]['id'] !== intval($id)) {
-                array_push($filteredTalkers, $talkers[$i]);
+        for ($i = 0; $i < count($data["talkers"]); $i += 1) {
+            if ($data["talkers"][$i]['id'] !== intval($id)) {
+                array_push($filteredTalkers, $data["talkers"][$i]);
             }
         }
 
-        file_put_contents(base_path($this->path), json_encode($filteredTalkers));
+        $dataManager->saveJsonFile($this->path, $data);
 
         return response('No Content', 204);
     }
 
-    public function searchTalker(Request $request)
+    public function searchTalker(Request $request, JsonFileManager $dataManager)
     {
+        $data = $dataManager->readJsonFile($this->path);
         $searchTerm = $request->query('q');
         $authorization = $request->header('Authorization');
+        $isNotAuthorized = $this->verifyToken($data["token"], $authorization);
 
-        $isNotAuthorized = $this->verifyToken($authorization);
         if ($isNotAuthorized)
             return $isNotAuthorized;
 
-        $talkers = $this->readJsonFile();
-
-        $filteredTalkers = Arr::where($talkers, function ($value, $key) use ($searchTerm) {
-            if (is_string($value))
-                return false;
+        $filteredTalkers = Arr::where($data["talkers"], function ($value, $key) use ($searchTerm) {
             return str_contains($value['name'], $searchTerm) && true;
         });
 
