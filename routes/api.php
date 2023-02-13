@@ -23,8 +23,8 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 Route::controller(TalkerController::class)->group(function () {
     Route::get('/talkers', 'getAllTalkers');
     Route::get('/talker/{id}', 'getTalker');
-    Route::post('/talker', 'createTalker');
-    Route::put('/talker/{id}', 'updateTalker');
+    Route::post('/talker', 'createTalker')->middleware('TalkerVerifyFields');
+    Route::put('/talker/{id}', 'updateTalker')->middleware('TalkerVerifyFields');
     Route::delete('/talker/{id}', 'deleteTalker');
     Route::get('/talkers/search', 'searchTalker');
 });
