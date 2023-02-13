@@ -29,4 +29,4 @@ Route::controller(TalkerController::class)->group(function () {
     Route::get('/talkers/search', 'searchTalker');
 });
 
-Route::post('/login', [LoginController::class, 'login']);
+Route::post('/login', [LoginController::class, 'login'])->middleware('LoginVerifyFields');
